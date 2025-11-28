@@ -18,7 +18,7 @@
 
   <script>
     // Configuration
-    const API_BASE_URL = '/api';
+    const API_BASE_URL = '/api'; // Relative URL since same domain
     
     class ConversationEvaluator {
       constructor() {
@@ -74,6 +74,7 @@
 
       async loadExistingData() {
         try {
+          // FIXED: Changed from /api/results to /api/evaluations
           const response = await fetch(`${API_BASE_URL}/evaluations`, {
             headers: { 'Authorization': `Bearer ${this.token}` }
           });
@@ -81,6 +82,7 @@
           if (!response.ok) throw new Error('Failed to load data');
           
           const data = await response.json();
+          // FIXED: Changed from data.results to data.evaluations
           if (data.success && data.evaluations && data.evaluations.length > 0) {
             this.conversations = this.transformDynamoDBData(data.evaluations);
             this.analytics = this.calculateAnalytics(this.conversations);
@@ -91,6 +93,7 @@
         }
       }
 
+      // FIXED: Complete rewrite to handle nested scores structure properly
       transformDynamoDBData(results) {
         return results.map(item => {
           const overallScore = parseFloat(item.overall_score) || 0;
@@ -164,13 +167,9 @@
           await this.loadExistingData();
           
           this.isProcessing = false;
-          this.uploadedFile = null;
-
-          alert('Uploaded CSV has been successfully evaluated! You will now be redirected to the dashboard.');    
-          
           this.currentView = 'dashboard';
+          this.uploadedFile = null;
           this.render();
-
         } catch (error) {
           console.error('Processing error:', error);
           alert('Error processing file: ' + error.message);
@@ -346,6 +345,12 @@
                     ${this.userData ? `<p class="text-sm text-gray-500 mt-1">Logged in as: ${this.userData.name || this.userData.email}</p>` : ''}
                   </div>
                   <div class="flex space-x-3">
+                    <button onclick="window.location.href='/analytics'" class="flex items-center space-x-2 px-6 py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition">
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                      </svg>
+                      <span>Big Data Analytics</span>
+                    </button>
                     <button onclick="app.logout()" class="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition">
                       Logout
                     </button>

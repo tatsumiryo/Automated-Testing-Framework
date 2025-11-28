@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Big Data Analytics Dashboard - Healthcare Conversations</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-hover:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+        .pulse-animation {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Navigation -->
+    <nav class="gradient-bg shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center">
+                    <i class="fas fa-brain text-white text-2xl mr-3"></i>
+                    <h1 class="text-white text-xl font-bold">Big Data Analytics Dashboard</h1>
+                </div>
+                <div class="flex space-x-4">
+                    <a href="index.html" class="text-white hover:text-gray-200 px-3 py-2 rounded-md">
+                        <i class="fas fa-home mr-2"></i>Main Dashboard
+                    </a>
+                    <button id="runAnalysisBtn" class="bg-white text-purple-600 px-4 py-2 rounded-md font-semibold hover:bg-gray-100">
+                        <i class="fas fa-play mr-2"></i>Run Analysis
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <!-- Analysis Status Banner -->
+        <div id="statusBanner" class="hidden mb-6 p-4 rounded-lg">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <div class="loading-spinner mr-4"></div>
+                    <div>
+                        <h3 class="font-semibold text-lg">Analysis in Progress</h3>
+                        <p class="text-sm" id="statusText">Processing conversations...</p>
+                    </div>
+                </div>
+                <button id="refreshBtn" class="text-blue-600 hover:text-blue-800">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
+        </div>
+
+        <!-- Key Metrics Overview -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <!-- Total Conversations -->
+            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm font-medium">Total Conversations</p>
+                        <p class="text-3xl font-bold text-gray-800 mt-2" id="totalConversations">-</p>
+                    </div>
+                    <div class="bg-blue-100 rounded-full p-3">
+                        <i class="fas fa-comments text-blue-600 text-2xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Average Sentiment -->
+            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm font-medium">Avg Sentiment</p>
+                        <p class="text-3xl font-bold mt-2" id="avgSentiment">-</p>
+                    </div>
+                    <div class="bg-green-100 rounded-full p-3">
+                        <i class="fas fa-smile text-green-600 text-2xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Urgency Level -->
+            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm font-medium">Avg Urgency</p>
+                        <p class="text-3xl font-bold text-orange-600 mt-2" id="avgUrgency">-</p>
+                    </div>
+                    <div class="bg-orange-100 rounded-full p-3">
+                        <i class="fas fa-exclamation-triangle text-orange-600 text-2xl"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Complexity Score -->
+            <div class="bg-white rounded-lg shadow-md p-6 card-hover">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm font-medium">Avg Complexity</p>
+                        <p class="text-3xl font-bold text-purple-600 mt-2" id="avgComplexity">-</p>
+                    </div>
+                    <div class="bg-purple-100 rounded-full p-3">
+                        <i class="fas fa-chart-line text-purple-600 text-2xl"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Sentiment Distribution -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold mb-4">Sentiment Distribution</h3>
+                <canvas id="sentimentChart"></canvas>
+            </div>
+
+            <!-- Emotion Distribution -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold mb-4">Emotion Analysis</h3>
+                <canvas id="emotionChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Urgency & Insights Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Urgency Distribution -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold mb-4">Urgency Levels</h3>
+                <canvas id="urgencyChart"></canvas>
+            </div>
+
+            <!-- Key Insights -->
+            <div class="bg-white rounded-lg shadow-md p-6">
+                <h3 class="text-lg font-semibold mb-4">
+                    <i class="fas fa-lightbulb text-yellow-500 mr-2"></i>Key Insights
+                </h3>
+                <div id="insightsList" class="space-y-3">
+                    <p class="text-gray-500 text-center py-8">Run analysis to generate insights</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detailed Conversations Table -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold">Conversation Details with Sentiment Analysis</h3>
+                <button id="exportBtn" class="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">
+                    <i class="fas fa-download mr-2"></i>Export Report
+                </button>
+            </div>
+            
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Title</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sentiment</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Urgency</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Emotion</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Complexity</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Score</th>
+                        </tr>
+                    </thead>
+                    <tbody id="conversationsTable" class="bg-white divide-y divide-gray-200">
+                        <tr>
+                            <td colspan="6" class="px-6 py-8 text-center text-gray-500">
+                                Loading conversations...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Analysis History -->
+        <div class="bg-white rounded-lg shadow-md p-6 mt-8">
+            <h3 class="text-lg font-semibold mb-4">Analysis History</h3>
+            <div id="historyList" class="space-y-2">
+                <p class="text-gray-500 text-center py-8">No analysis history available</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://52.23.188.49:5000/api';
+        
+        let sentimentChart, emotionChart, urgencyChart;
+        let currentAnalysisId = null;
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', () => {
+            loadLatestResults();
+            loadConversationsWithSentiment();
+            loadAnalysisHistory();
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            document.getElementById('runAnalysisBtn').addEventListener('click', runAnalysis);
+            document.getElementById('refreshBtn').addEventListener('click', checkAnalysisStatus);
+            document.getElementById('exportBtn').addEventListener('click', exportReport);
+        }
+
+        async function runAnalysis() {
+            showStatusBanner('Submitting analysis job...');
+            
+            try {
+                const response = await fetch(`${API_BASE}/analytics/trigger`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    currentAnalysisId = data.step_id;
+                    showStatusBanner('Analysis started! Processing data...', 'info');
+                    
+                    // Poll for status
+                    pollAnalysisStatus(data.step_id);
+                } else {
+                    showStatusBanner(data.error || 'Failed to start analysis', 'error');
+                }
+            } catch (error) {
+                showStatusBanner('Error starting analysis: ' + error.message, 'error');
+            }
+        }
+
+        async function pollAnalysisStatus(stepId) {
+            const maxAttempts = 60; // 5 minutes
+            let attempts = 0;
+            
+            const interval = setInterval(async () => {
+                attempts++;
+                
+                try {
+                    const response = await fetch(`${API_BASE}/analytics/status/${stepId}`);
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        const status = data.status;
+                        
+                        if (status === 'COMPLETED') {
+                            clearInterval(interval);
+                            showStatusBanner('Analysis completed successfully!', 'success');
+                            setTimeout(() => {
+                                hideStatusBanner();
+                                loadLatestResults();
+                                loadConversationsWithSentiment();
+                            }, 2000);
+                        } else if (status === 'FAILED' || status === 'CANCELLED') {
+                            clearInterval(interval);
+                            showStatusBanner('Analysis failed', 'error');
+                        } else {
+                            showStatusBanner(`Analysis in progress: ${status}`, 'info');
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error checking status:', error);
+                }
+                
+                if (attempts >= maxAttempts) {
+                    clearInterval(interval);
+                    showStatusBanner('Analysis timeout - check manually', 'warning');
+                }
+            }, 5000); // Check every 5 seconds
+        }
+
+        async function loadLatestResults() {
+            try {
+                const response = await fetch(`${API_BASE}/analytics/results`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateMetrics(data.metrics);
+                    updateCharts(data.metrics);
+                    updateInsights(data.insights);
+                }
+            } catch (error) {
+                console.error('Error loading results:', error);
+            }
+        }
+
+        function updateMetrics(metrics) {
+            const overall = metrics.overall_stats;
+            
+            document.getElementById('totalConversations').textContent = 
+                overall.total_conversations || 0;
+            
+            const sentiment = parseFloat(overall.avg_sentiment || 0);
+            const sentimentEl = document.getElementById('avgSentiment');
+            sentimentEl.textContent = sentiment.toFixed(3);
+            sentimentEl.className = `text-3xl font-bold mt-2 ${
+                sentiment > 0 ? 'text-green-600' : 
+                sentiment < 0 ? 'text-red-600' : 'text-gray-600'
+            }`;
+            
+            document.getElementById('avgUrgency').textContent = 
+                parseFloat(overall.avg_urgency || 0).toFixed(3);
+            
+            document.getElementById('avgComplexity').textContent = 
+                parseFloat(overall.avg_complexity || 0).toFixed(3);
+        }
+
+        function updateCharts(metrics) {
+            // Sentiment Distribution Chart
+            const sentimentDist = metrics.sentiment_distribution || {};
+            if (sentimentChart) sentimentChart.destroy();
+            
+            const sentimentCtx = document.getElementById('sentimentChart').getContext('2d');
+            sentimentChart = new Chart(sentimentCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(sentimentDist),
+                    datasets: [{
+                        data: Object.values(sentimentDist),
+                        backgroundColor: [
+                            '#10b981', // Positive - green
+                            '#ef4444', // Negative - red
+                            '#6b7280'  // Neutral - gray
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+
+            // Emotion Distribution Chart
+            const emotionDist = metrics.emotion_distribution || {};
+            if (emotionChart) emotionChart.destroy();
+            
+            const emotionCtx = document.getElementById('emotionChart').getContext('2d');
+            emotionChart = new Chart(emotionCtx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(emotionDist),
+                    datasets: [{
+                        label: 'Count',
+                        data: Object.values(emotionDist),
+                        backgroundColor: '#8b5cf6'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+
+            // Urgency Distribution Chart
+            const urgencyDist = metrics.urgency_distribution || {};
+            if (urgencyChart) urgencyChart.destroy();
+            
+            const urgencyCtx = document.getElementById('urgencyChart').getContext('2d');
+            urgencyChart = new Chart(urgencyCtx, {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(urgencyDist),
+                    datasets: [{
+                        data: Object.values(urgencyDist),
+                        backgroundColor: [
+                            '#dc2626', // Critical - red
+                            '#f59e0b', // High - orange
+                            '#fbbf24', // Medium - yellow
+                            '#10b981'  // Low - green
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+        }
+
+        function updateInsights(insights) {
+            const insightsList = document.getElementById('insightsList');
+            
+            if (!insights || insights.length === 0) {
+                insightsList.innerHTML = '<p class="text-gray-500 text-center py-8">No insights generated yet</p>';
+                return;
+            }
+            
+            insightsList.innerHTML = insights.map(insight => {
+                const icon = insight.priority === 'critical' ? 'fa-exclamation-circle' :
+                           insight.priority === 'high' ? 'fa-exclamation-triangle' :
+                           insight.priority === 'medium' ? 'fa-info-circle' : 'fa-lightbulb';
+                
+                const color = insight.priority === 'critical' ? 'red' :
+                            insight.priority === 'high' ? 'orange' :
+                            insight.priority === 'medium' ? 'blue' : 'green';
+                
+                return `
+                    <div class="flex items-start space-x-3 p-3 bg-${color}-50 rounded-lg">
+                        <i class="fas ${icon} text-${color}-600 mt-1"></i>
+                        <div>
+                            <p class="font-medium text-${color}-900">${insight.category.toUpperCase()}</p>
+                            <p class="text-sm text-gray-700">${insight.message}</p>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function loadConversationsWithSentiment() {
+            try {
+                const response = await fetch(`${API_BASE}/analytics/conversations/sentiment`);
+                const data = await response.json();
+                
+                if (data.success && data.conversations.length > 0) {
+                    updateConversationsTable(data.conversations);
+                }
+            } catch (error) {
+                console.error('Error loading conversations:', error);
+            }
+        }
+
+        function updateConversationsTable(conversations) {
+            const tbody = document.getElementById('conversationsTable');
+            
+            tbody.innerHTML = conversations.map(conv => {
+                const sentimentColor = conv.medical_sentiment > 0.3 ? 'green' :
+                                      conv.medical_sentiment < -0.3 ? 'red' : 'yellow';
+                
+                const urgencyColor = conv.urgency_level > 0.7 ? 'red' :
+                                   conv.urgency_level > 0.4 ? 'orange' :
+                                   conv.urgency_level > 0.2 ? 'yellow' : 'green';
+                
+                return `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 text-sm text-gray-900">${conv.title}</td>
+                        <td class="px-6 py-4">
+                            <span class="px-2 py-1 text-xs rounded-full bg-${sentimentColor}-100 text-${sentimentColor}-800">
+                                ${conv.sentiment_category} (${conv.medical_sentiment.toFixed(2)})
+                            </span>
+                        </td>
+                        <td class="px-6 py-4">
+                            <span class="px-2 py-1 text-xs rounded-full bg-${urgencyColor}-100 text-${urgencyColor}-800">
+                                ${conv.urgency_category} (${conv.urgency_level.toFixed(2)})
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 text-sm text-gray-600">${conv.dominant_emotion}</td>
+                        <td class="px-6 py-4 text-sm text-gray-600">${conv.complexity_score.toFixed(2)}</td>
+                        <td class="px-6 py-4 text-sm font-semibold">${conv.overall_score}%</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function loadAnalysisHistory() {
+            try {
+                const response = await fetch(`${API_BASE}/analytics/history`);
+                const data = await response.json();
+                
+                if (data.success && data.history.length > 0) {
+                    updateHistoryList(data.history);
+                }
+            } catch (error) {
+                console.error('Error loading history:', error);
+            }
+        }
+
+        function updateHistoryList(history) {
+            const historyList = document.getElementById('historyList');
+            
+            historyList.innerHTML = history.map(item => `
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer">
+                    <div>
+                        <p class="font-medium">${item.analysis_id}</p>
+                        <p class="text-sm text-gray-600">${new Date(item.timestamp).toLocaleString()}</p>
+                    </div>
+                    <span class="text-sm text-gray-500">${item.total_conversations} conversations</span>
+                </div>
+            `).join('');
+        }
+
+        function showStatusBanner(message, type = 'info') {
+            const banner = document.getElementById('statusBanner');
+            const statusText = document.getElementById('statusText');
+            
+            statusText.textContent = message;
+            
+            banner.className = `mb-6 p-4 rounded-lg ${
+                type === 'success' ? 'bg-green-100 border-green-500' :
+                type === 'error' ? 'bg-red-100 border-red-500' :
+                type === 'warning' ? 'bg-yellow-100 border-yellow-500' :
+                'bg-blue-100 border-blue-500'
+            } border-l-4`;
+            
+            banner.classList.remove('hidden');
+        }
+
+        function hideStatusBanner() {
+            document.getElementById('statusBanner').classList.add('hidden');
+        }
+
+        function checkAnalysisStatus() {
+            if (currentAnalysisId) {
+                pollAnalysisStatus(currentAnalysisId);
+            }
+        }
+
+        async function exportReport() {
+            try {
+                const response = await fetch(`${API_BASE}/analytics/results`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    // For now, download as JSON
+                    const blob = new Blob([JSON.stringify(data, null, 2)], 
+                                        { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `analytics_report_${data.analysis_id}.json`;
+                    a.click();
+                }
+            } catch (error) {
+                alert('Error exporting report: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>
