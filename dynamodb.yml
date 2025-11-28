@@ -1,0 +1,117 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'DynamoDB tables for Voice Agent Testing Framework'
+
+Resources:
+  # Test Results Table - stores all test execution results
+  VoiceTestResultsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: voice_test_results
+      AttributeDefinitions:
+        - AttributeName: test_id
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+        - AttributeName: persona_type
+          AttributeType: S
+      KeySchema:
+        - AttributeName: test_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: timestamp-index
+          KeySchema:
+            - AttributeName: timestamp
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput:
+            ReadCapacityUnits: 5
+            WriteCapacityUnits: 5
+        - IndexName: persona-index
+          KeySchema:
+            - AttributeName: persona_type
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput:
+            ReadCapacityUnits: 5
+            WriteCapacityUnits: 5
+      BillingMode: PROVISIONED
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      Tags:
+        - Key: Project
+          Value: VoiceAgentTesting
+        - Key: Environment
+          Value: Development
+
+  # Conversation Logs Table - stores all conversations
+  ConversationLogsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: conversation_logs
+      AttributeDefinitions:
+        - AttributeName: log_id
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: S
+      KeySchema:
+        - AttributeName: log_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: timestamp-index
+          KeySchema:
+            - AttributeName: timestamp
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput:
+            ReadCapacityUnits: 5
+            WriteCapacityUnits: 5
+      BillingMode: PROVISIONED
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      Tags:
+        - Key: Project
+          Value: VoiceAgentTesting
+        - Key: Environment
+          Value: Development
+
+  # Agent Configurations Table - stores different agent setups
+  AgentConfigurationsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: agent_configurations
+      AttributeDefinitions:
+        - AttributeName: config_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: config_id
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+      Tags:
+        - Key: Project
+          Value: VoiceAgentTesting
+        - Key: Environment
+          Value: Development
+
+Outputs:
+  TestResultsTableName:
+    Description: Name of the test results table
+    Value: !Ref VoiceTestResultsTable
+    Export:
+      Name: VoiceTestResultsTableName
+
+  ConversationLogsTableName:
+    Description: Name of the conversation logs table
+    Value: !Ref ConversationLogsTable
+    Export:
+      Name: ConversationLogsTableName
+
+  AgentConfigurationsTableName:
+    Description: Name of the agent configurations table
+    Value: !Ref AgentConfigurationsTable
+    Export:
+      Name: AgentConfigurationsTableName

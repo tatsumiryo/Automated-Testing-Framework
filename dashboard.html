@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Agent Testing Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 1.1em;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            text-align: center;
+            transition: transform 0.3s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .stat-value {
+            font-size: 3em;
+            font-weight: bold;
+            color: #667eea;
+            margin: 10px 0;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 1.1em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .chart-card {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+        }
+        
+        .chart-title {
+            font-size: 1.5em;
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .table-card {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            overflow-x: auto;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+        
+        th {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+        }
+        
+        tr:hover {
+            background: #f5f5f5;
+        }
+        
+        .status-pass {
+            color: #22c55e;
+            font-weight: bold;
+        }
+        
+        .status-fail {
+            color: #ef4444;
+            font-weight: bold;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.5em;
+            color: white;
+        }
+        
+        .error {
+            background: #fee2e2;
+            color: #dc2626;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎤 Voice Agent Testing Dashboard</h1>
+            <p class="subtitle">Real-time Analytics & Performance Metrics</p>
+        </header>
+
+        <div id="loading" class="loading">Loading test results...</div>
+        <div id="error" class="error" style="display: none;"></div>
+
+        <div id="dashboard" style="display: none;">
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">Total Tests</div>
+                    <div class="stat-value" id="totalTests">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Passed</div>
+                    <div class="stat-value" id="passedTests" style="color: #22c55e;">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Failed</div>
+                    <div class="stat-value" id="failedTests" style="color: #ef4444;">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Average Score</div>
+                    <div class="stat-value" id="avgScore">0%</div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3 class="chart-title">Pass/Fail Distribution</h3>
+                    <canvas id="passFailChart"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h3 class="chart-title">Average Score by Persona</h3>
+                    <canvas id="personaChart"></canvas>
+                </div>
+            </div>
+
+            <div class="charts-grid">
+                <div class="chart-card">
+                    <h3 class="chart-title">Response Time Distribution</h3>
+                    <canvas id="responseTimeChart"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h3 class="chart-title">Score Metrics Breakdown</h3>
+                    <canvas id="metricsChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Recent Tests Table -->
+            <div class="table-card">
+                <h3 class="chart-title">Recent Test Results</h3>
+                <table id="resultsTable">
+                    <thead>
+                        <tr>
+                            <th>Test ID</th>
+                            <th>Persona</th>
+                            <th>Score</th>
+                            <th>Status</th>
+                            <th>Response Time</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://52.23.188.49:5000';
+
+        async function fetchResults() {
+            try {
+                const response = await fetch(`${API_URL}/results`);
+                if (!response.ok) throw new Error('Failed to fetch results');
+                const data = await response.json();
+                return data.results || [];
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error').textContent = `Error: ${error.message}. Make sure your Flask server is running at ${API_URL}`;
+                throw error;
+            }
+        }
+
+        function updateStats(results) {
+            const total = results.length;
+            const passed = results.filter(r => r.passed).length;
+            const failed = total - passed;
+            const avgScore = results.length > 0 
+                ? (results.reduce((sum, r) => sum + parseFloat(r.overall_score), 0) / total * 100).toFixed(1)
+                : 0;
+
+            document.getElementById('totalTests').textContent = total;
+            document.getElementById('passedTests').textContent = passed;
+            document.getElementById('failedTests').textContent = failed;
+            document.getElementById('avgScore').textContent = avgScore + '%';
+        }
+
+        function createPassFailChart(results) {
+            const passed = results.filter(r => r.passed).length;
+            const failed = results.length - passed;
+
+            const ctx = document.getElementById('passFailChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Passed', 'Failed'],
+                    datasets: [{
+                        data: [passed, failed],
+                        backgroundColor: ['#22c55e', '#ef4444']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        function createPersonaChart(results) {
+            const personaScores = {};
+            results.forEach(r => {
+                if (!personaScores[r.persona_type]) {
+                    personaScores[r.persona_type] = [];
+                }
+                personaScores[r.persona_type].push(parseFloat(r.overall_score) * 100);
+            });
+
+            const labels = Object.keys(personaScores);
+            const data = labels.map(persona => {
+                const scores = personaScores[persona];
+                return (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1);
+            });
+
+            const ctx = document.getElementById('personaChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Average Score (%)',
+                        data: data,
+                        backgroundColor: '#667eea'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100
+                        }
+                    }
+                }
+            });
+        }
+
+        function createResponseTimeChart(results) {
+            const times = results.map(r => parseFloat(r.response_time).toFixed(2));
+            const labels = results.map((_, i) => `Test ${i + 1}`);
+
+            const ctx = document.getElementById('responseTimeChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Response Time (s)',
+                        data: times,
+                        borderColor: '#764ba2',
+                        backgroundColor: 'rgba(118, 75, 162, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+
+        function createMetricsChart(results) {
+            const avgMetrics = {
+                intent_recognition: 0,
+                response_correctness: 0,
+                response_time: 0,
+                error_handling: 0,
+                tone_appropriateness: 0
+            };
+
+            results.forEach(r => {
+                if (r.scores) {
+                    Object.keys(avgMetrics).forEach(key => {
+                        avgMetrics[key] += parseFloat(r.scores[key]) || 0;
+                    });
+                }
+            });
+
+            Object.keys(avgMetrics).forEach(key => {
+                avgMetrics[key] = ((avgMetrics[key] / results.length) * 100).toFixed(1);
+            });
+
+            const ctx = document.getElementById('metricsChart').getContext('2d');
+            new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: Object.keys(avgMetrics).map(k => k.replace(/_/g, ' ')),
+                    datasets: [{
+                        label: 'Average Metric Scores (%)',
+                        data: Object.values(avgMetrics),
+                        backgroundColor: 'rgba(102, 126, 234, 0.2)',
+                        borderColor: '#667eea',
+                        pointBackgroundColor: '#667eea'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 100
+                        }
+                    }
+                }
+            });
+        }
+
+        function populateTable(results) {
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = '';
+
+            results.slice(0, 10).forEach(r => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td>${r.test_id}</td>
+                    <td>${r.persona_type}</td>
+                    <td>${(parseFloat(r.overall_score) * 100).toFixed(1)}%</td>
+                    <td class="${r.passed ? 'status-pass' : 'status-fail'}">${r.passed ? 'PASSED ✓' : 'FAILED ✗'}</td>
+                    <td>${parseFloat(r.response_time).toFixed(2)}s</td>
+                    <td>${new Date(r.timestamp).toLocaleString()}</td>
+                `;
+            });
+        }
+
+        async function init() {
+            try {
+                const results = await fetchResults();
+                
+                if (results.length === 0) {
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('error').style.display = 'block';
+                    document.getElementById('error').textContent = 'No test results found. Run some tests first!';
+                    return;
+                }
+
+                updateStats(results);
+                createPassFailChart(results);
+                createPersonaChart(results);
+                createResponseTimeChart(results);
+                createMetricsChart(results);
+                populateTable(results);
+
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('dashboard').style.display = 'block';
+            } catch (error) {
+                console.error('Dashboard initialization failed:', error);
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>

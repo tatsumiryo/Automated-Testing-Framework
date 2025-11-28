@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Conversation Evaluator - Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+    .fade-in { animation: fadeIn 0.6s ease-out; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .animate-spin { animation: spin 1s linear infinite; }
+    .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+  </style>
+</head>
+<body class="bg-gray-50">
+  <div id="app"></div>
+
+  <script>
+    // Configuration
+    const API_BASE_URL = '/api';
+    
+    class ConversationEvaluator {
+      constructor() {
+        this.currentView = 'upload';
+        this.uploadedFile = null;
+        this.conversations = [];
+        this.analytics = null;
+        this.selectedConversation = null;
+        this.filterMetric = 'all';
+        this.isProcessing = false;
+        this.token = localStorage.getItem('access_token');
+        this.userData = null;
+        this.init();
+      }
+
+      async init() {
+        // Check authentication
+        if (!this.token) {
+          window.location.href = '/';
+          return;
+        }
+
+        // Verify token
+        const isValid = await this.verifyAuth();
+        if (!isValid) {
+          localStorage.removeItem('access_token');
+          window.location.href = '/';
+          return;
+        }
+
+        // Load existing data from DynamoDB
+        await this.loadExistingData();
+        this.render();
+      }
+
+      async verifyAuth() {
+        try {
+          const response = await fetch(`${API_BASE_URL}/auth/verify`, {
+            headers: { 'Authorization': `Bearer ${this.token}` }
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            this.userData = data.user;
+            return true;
+          }
+          return false;
+        } catch (error) {
+          console.error('Auth verification failed:', error);
+          return false;
+        }
+      }
+
+      async loadExistingData() {
+        try {
+          const response = await fetch(`${API_BASE_URL}/evaluations`, {
+            headers: { 'Authorization': `Bearer ${this.token}` }
+          });
+          
+          if (!response.ok) throw new Error('Failed to load data');
+          
+          const data = await response.json();
+          if (data.success && data.evaluations && data.evaluations.length > 0) {
+            this.conversations = this.transformDynamoDBData(data.evaluations);
+            this.analytics = this.calculateAnalytics(this.conversations);
+            this.currentView = 'dashboard';
+          }
+        } catch (error) {
+          console.error('Error loading data:', error);
+        }
+      }
+
+      transformDynamoDBData(results) {
+        return results.map(item => {
+          const overallScore = parseFloat(item.overall_score) || 0;
+          
+          // Handle nested scores structure from fixed backend
+          const scores = item.scores || {};
+          
+          return {
+            id: item.conversation_id || item.test_id,
+            title: item.conversation_title || item.title || 'Conversation',
+            timestamp: item.timestamp || new Date().toISOString(),
+            participant: item.persona_type || 'User',
+            transcript: item.conversation_text || item.conversation || item.test_prompt || item.agent_response || 'No transcript available',
+            metrics: {
+              sentiment: parseFloat(scores.tone_appropriateness) || 0,
+              engagement: parseFloat(scores.intent_recognition) || 0,
+              quality: parseFloat(scores.response_correctness) || 0,
+              flow: parseFloat(scores.conversation_flow) || 0,
+              overallScore: overallScore
+            },
+            scores: {
+              intent_recognition: parseFloat(scores.intent_recognition) || 0,
+              response_correctness: parseFloat(scores.response_correctness) || 0,
+              conversation_flow: parseFloat(scores.conversation_flow) || 0,
+              error_handling: parseFloat(scores.error_handling) || 0,
+              tone_appropriateness: parseFloat(scores.tone_appropriateness) || 0,
+              safety_compliance: parseFloat(scores.safety_compliance) || 0
+            },
+            strengths: Array.isArray(item.strengths) ? item.strengths : [],
+            improvements: Array.isArray(item.improvements) ? item.improvements : [],
+            passed: item.passed || overallScore >= 75,
+            confidence: parseFloat(item.confidence) || 0,
+            response_time: parseFloat(item.response_time) || 0,
+            intent_detected: item.intent_detected || 'N/A',
+            overall_assessment: item.overall_assessment || ''
+          };
+        });
+      }
+
+      async handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        if (!file.name.endsWith('.csv')) {
+          alert('Please upload a CSV file');
+          return;
+        }
+
+        this.uploadedFile = file;
+        this.isProcessing = true;
+        this.render();
+
+        try {
+          const formData = new FormData();
+          formData.append('file', this.uploadedFile);
+
+          const response = await fetch(`${API_BASE_URL}/evaluate`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${this.token}` },
+            body: formData
+          });
+
+          const data = await response.json();
+
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Upload failed');
+          }
+
+          // Wait a bit then reload data
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          await this.loadExistingData();
+          
+          this.isProcessing = false;
+          this.uploadedFile = null;
+
+          alert('Uploaded CSV has been successfully evaluated! You will now be redirected to the dashboard.');    
+          
+          this.currentView = 'dashboard';
+          this.render();
+
+        } catch (error) {
+          console.error('Processing error:', error);
+          alert('Error processing file: ' + error.message);
+          this.isProcessing = false;
+          this.uploadedFile = null;
+          this.render();
+        }
+      }
+
+      calculateAnalytics(conversations) {
+        if (conversations.length === 0) return null;
+
+        const avg = arr => arr.reduce((a, b) => a + b, 0) / arr.length;
+        
+        const analytics = {
+          totalConversations: conversations.length,
+          averageSentiment: avg(conversations.map(c => c.metrics.sentiment)),
+          averageEngagement: avg(conversations.map(c => c.metrics.engagement)),
+          averageQuality: avg(conversations.map(c => c.metrics.quality)),
+          averageFlow: avg(conversations.map(c => c.metrics.flow)),
+          overallScore: avg(conversations.map(c => c.metrics.overallScore)),
+          strengths: this.identifyStrengths(conversations),
+          weaknesses: this.identifyWeaknesses(conversations),
+          trends: this.calculateTrends(conversations),
+          passRate: (conversations.filter(c => c.passed).length / conversations.length * 100).toFixed(1)
+        };
+
+        return analytics;
+      }
+
+      identifyStrengths(conversations) {
+        const metrics = ['sentiment', 'engagement', 'quality', 'flow'];
+        return metrics
+          .map(m => ({ metric: m, score: conversations.reduce((sum, c) => sum + c.metrics[m], 0) / conversations.length }))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 3);
+      }
+
+      identifyWeaknesses(conversations) {
+        const metrics = ['sentiment', 'engagement', 'quality', 'flow'];
+        return metrics
+          .map(m => ({ metric: m, score: conversations.reduce((sum, c) => sum + c.metrics[m], 0) / conversations.length }))
+          .sort((a, b) => a.score - b.score)
+          .slice(0, 3);
+      }
+
+      calculateTrends(conversations) {
+        if (conversations.length < 2) return { direction: 'stable', change: 0 };
+        
+        const sorted = [...conversations].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+        const firstHalf = sorted.slice(0, Math.floor(sorted.length / 2));
+        const secondHalf = sorted.slice(Math.floor(sorted.length / 2));
+        
+        const firstAvg = firstHalf.reduce((sum, c) => sum + c.metrics.overallScore, 0) / firstHalf.length;
+        const secondAvg = secondHalf.reduce((sum, c) => sum + c.metrics.overallScore, 0) / secondHalf.length;
+        const change = ((secondAvg - firstAvg) / firstAvg * 100).toFixed(1);
+        
+        return {
+          direction: change > 5 ? 'improving' : change < -5 ? 'declining' : 'stable',
+          change: Math.abs(change)
+        };
+      }
+
+      getScoreColor(score) {
+        if (score >= 75) return 'text-green-600';
+        if (score >= 50) return 'text-yellow-600';
+        return 'text-red-600';
+      }
+
+      getScoreBg(score) {
+        if (score >= 75) return 'bg-green-50';
+        if (score >= 50) return 'bg-yellow-50';
+        return 'bg-red-50';
+      }
+
+      logout() {
+        localStorage.removeItem('access_token');
+        window.location.href = '/';
+      }
+
+      render() {
+        const appDiv = document.getElementById('app');
+        
+        if (this.currentView === 'upload') {
+          appDiv.innerHTML = this.renderUploadView();
+        } else if (this.currentView === 'dashboard') {
+          appDiv.innerHTML = this.renderDashboardView();
+        }
+
+        this.attachEventListeners();
+      }
+
+      renderUploadView() {
+        return `
+          <div class="min-h-screen flex items-center justify-center p-4">
+            <div class="max-w-4xl w-full">
+              <div class="text-center mb-12 fade-in">
+                <div class="inline-flex items-center justify-center w-20 h-20 gradient-bg rounded-2xl mb-6">
+                  <svg class="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path>
+                  </svg>
+                </div>
+                <h1 class="text-5xl font-bold text-gray-800 mb-4">Conversation Evaluator</h1>
+                <p class="text-xl text-gray-600 mb-2">AI-Powered Analysis Platform</p>
+                ${this.userData ? `<p class="text-sm text-gray-500">Welcome, ${this.userData.name || this.userData.email}</p>` : ''}
+              </div>
+
+              <div class="bg-white rounded-3xl shadow-2xl p-12 fade-in">
+                <div class="text-center mb-8">
+                  <h2 class="text-3xl font-bold text-gray-800 mb-6">How It Works</h2>
+                  <div class="grid md:grid-cols-3 gap-8 mb-12">
+                    <div class="text-center">
+                      <div class="w-16 h-16 gradient-bg rounded-full flex items-center justify-center mx-auto mb-4 text-white text-2xl font-bold">1</div>
+                      <h3 class="font-bold text-gray-800 mb-2">Upload CSV</h3>
+                      <p class="text-sm text-gray-600">Upload conversation data with transcripts, chat logs, or customer interactions</p>
+                    </div>
+                    <div class="text-center">
+                      <div class="w-16 h-16 gradient-bg rounded-full flex items-center justify-center mx-auto mb-4 text-white text-2xl font-bold">2</div>
+                      <h3 class="font-bold text-gray-800 mb-2">AI Analysis</h3>
+                      <p class="text-sm text-gray-600">Automatic evaluation of sentiment, engagement, response quality, and conversation flow</p>
+                    </div>
+                    <div class="text-center">
+                      <div class="w-16 h-16 gradient-bg rounded-full flex items-center justify-center mx-auto mb-4 text-white text-2xl font-bold">3</div>
+                      <h3 class="font-bold text-gray-800 mb-2">View Insights</h3>
+                      <p class="text-sm text-gray-600">Interactive dashboard with performance scores, strengths, weaknesses, and trends</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="border-4 border-dashed border-indigo-300 rounded-2xl p-16 text-center hover:border-indigo-500 transition">
+                  ${this.isProcessing ? `
+                    <div class="flex flex-col items-center">
+                      <div class="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+                      <p class="text-xl text-gray-700 font-semibold">Processing your file...</p>
+                      <p class="text-sm text-gray-500 mt-2">This may take a few moments</p>
+                    </div>
+                  ` : `
+                    <input type="file" id="fileInput" accept=".csv" class="hidden">
+                    <label for="fileInput" class="cursor-pointer">
+                      <svg class="w-20 h-20 text-indigo-600 mx-auto mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                      </svg>
+                      <p class="text-2xl font-bold text-gray-800 mb-2">Drop your CSV file here</p>
+                      <p class="text-gray-600 mb-4">or click to browse</p>
+                      <p class="text-sm text-gray-500">Supported format: CSV with conversation data</p>
+                    </label>
+                  `}
+                </div>
+
+                <div class="mt-8 text-center">
+                  <button onclick="app.logout()" class="text-gray-600 hover:text-gray-800 transition">Logout</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      renderDashboardView() {
+        const filteredConversations = this.filterMetric === 'all' 
+          ? this.conversations 
+          : this.conversations.filter(c => c.metrics[this.filterMetric] >= 50);
+
+        return `
+          <div class="min-h-screen bg-gray-50 p-8">
+            <div class="max-w-7xl mx-auto">
+              <!-- Header -->
+              <div class="mb-8 fade-in">
+                <div class="flex items-center justify-between mb-6">
+                  <div>
+                    <h1 class="text-4xl font-bold text-gray-800 mb-2">Analytics Dashboard</h1>
+                    <p class="text-gray-600">${this.conversations.length} conversations analyzed • Last updated: ${new Date().toLocaleString()}</p>
+                    ${this.userData ? `<p class="text-sm text-gray-500 mt-1">Logged in as: ${this.userData.name || this.userData.email}</p>` : ''}
+                  </div>
+                  <div class="flex space-x-3">
+                    <button onclick="app.logout()" class="px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition">
+                      Logout
+                    </button>
+                    <button onclick="app.resetUpload()" class="flex items-center space-x-2 px-6 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition">
+                      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                      </svg>
+                      <span>Upload New</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Overall Score -->
+                <div class="gradient-bg rounded-2xl p-8 text-white">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <p class="text-lg opacity-90 mb-2">Overall Performance Score</p>
+                      <p class="text-6xl font-bold">${this.analytics.overallScore.toFixed(1)}%</p>
+                      <p class="text-sm opacity-80 mt-2">Pass Rate: ${this.analytics.passRate}%</p>
+                    </div>
+                    <div class="text-right">
+                      <div class="flex items-center space-x-2 mb-2">
+                        <span class="text-3xl font-semibold">
+                          ${this.analytics.trends.direction === 'improving' ? '📈 ↑' : this.analytics.trends.direction === 'declining' ? '📉 ↓' : '➡️'} ${this.analytics.trends.change}%
+                        </span>
+                      </div>
+                      <p class="text-sm opacity-90">${this.analytics.trends.direction === 'improving' ? 'Improving' : this.analytics.trends.direction === 'declining' ? 'Declining' : 'Stable'} trend</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Key Metrics -->
+              <div class="grid md:grid-cols-4 gap-6 mb-8">
+                ${this.renderMetricCard('Sentiment', this.analytics.averageSentiment, '😊')}
+                ${this.renderMetricCard('Engagement', this.analytics.averageEngagement, '💬')}
+                ${this.renderMetricCard('Quality', this.analytics.averageQuality, '⭐')}
+                ${this.renderMetricCard('Flow', this.analytics.averageFlow, '📈')}
+              </div>
+
+              <!-- Strengths & Weaknesses -->
+              <div class="grid md:grid-cols-2 gap-6 mb-8">
+                <div class="bg-white rounded-2xl shadow-lg p-6 fade-in">
+                  <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                    <span class="text-2xl mr-2">✅</span> Top Strengths
+                  </h3>
+                  <div class="space-y-3">
+                    ${this.analytics.strengths.map(s => `
+                      <div class="flex items-center justify-between p-4 bg-green-50 rounded-xl">
+                        <span class="font-semibold text-gray-800 capitalize">${s.metric}</span>
+                        <span class="text-green-600 font-bold text-xl">${s.score.toFixed(1)}%</span>
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+                <div class="bg-white rounded-2xl shadow-lg p-6 fade-in">
+                  <h3 class="text-xl font-bold text-gray-800 mb-4 flex items-center">
+                    <span class="text-2xl mr-2">⚠️</span> Areas for Improvement
+                  </h3>
+                  <div class="space-y-3">
+                    ${this.analytics.weaknesses.map(w => `
+                      <div class="flex items-center justify-between p-4 bg-orange-50 rounded-xl">
+                        <span class="font-semibold text-gray-800 capitalize">${w.metric}</span>
+                        <span class="text-orange-600 font-bold text-xl">${w.score.toFixed(1)}%</span>
+                      </div>
+                    `).join('')}
+                  </div>
+                </div>
+              </div>
+
+              <!-- Conversations List -->
+              <div class="bg-white rounded-2xl shadow-lg p-6 fade-in">
+                <div class="flex items-center justify-between mb-6">
+                  <h3 class="text-2xl font-bold text-gray-800">Conversation Details</h3>
+                  <select id="filterSelect" class="px-4 py-2 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+                    <option value="all">All Conversations</option>
+                    <option value="sentiment">High Sentiment (≥50%)</option>
+                    <option value="engagement">High Engagement (≥50%)</option>
+                    <option value="quality">High Quality (≥50%)</option>
+                    <option value="flow">Good Flow (≥50%)</option>
+                  </select>
+                </div>
+                <div class="space-y-4 max-h-[800px] overflow-y-auto">
+                  ${filteredConversations.length > 0 ? filteredConversations.map(conv => this.renderConversationCard(conv)).join('') : '<p class="text-center text-gray-500 py-8">No conversations match the selected filter</p>'}
+                </div>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      renderMetricCard(label, value, icon) {
+        return `
+          <div class="bg-white rounded-2xl shadow-lg p-6 fade-in hover:shadow-xl transition">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="text-sm font-semibold text-gray-600 uppercase">${label}</h3>
+              <span class="text-3xl">${icon}</span>
+            </div>
+            <p class="text-4xl font-bold ${this.getScoreColor(value)}">${value.toFixed(1)}%</p>
+          </div>
+        `;
+      }
+
+      renderConversationCard(conv) {
+        return `
+          <div class="p-6 border-2 border-gray-200 rounded-xl hover:border-indigo-500 hover:shadow-lg transition" data-conv-id="${conv.id}">
+            <div class="flex items-start justify-between mb-4">
+              <div class="flex-1">
+                <div class="flex items-center space-x-3 mb-2">
+                  <h4 class="font-bold text-gray-800 text-lg">${conv.title}</h4>
+                  <span class="px-2 py-1 text-xs font-semibold ${conv.passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'} rounded">${conv.passed ? 'PASSED' : 'FAILED'}</span>
+                  <span class="text-sm text-gray-500">${conv.participant}</span>
+                </div>
+                <p class="text-gray-700 mb-3">${conv.transcript.substring(0, 200)}${conv.transcript.length > 200 ? '...' : ''}</p>
+                <div class="flex items-center space-x-4 text-xs text-gray-500">
+                  <span>📅 ${new Date(conv.timestamp).toLocaleString()}</span>
+                  ${conv.response_time ? `<span>⏱️ ${conv.response_time.toFixed(2)}s</span>` : ''}
+                  ${conv.confidence ? `<span>🎯 ${(conv.confidence * 100).toFixed(0)}% confidence</span>` : ''}
+                </div>
+              </div>
+              <div class="text-right ml-4 ${this.getScoreBg(conv.metrics.overallScore)} rounded-xl p-4">
+                <div class="text-4xl font-bold ${this.getScoreColor(conv.metrics.overallScore)}">
+                  ${conv.metrics.overallScore.toFixed(0)}%
+                </div>
+                <div class="text-xs text-gray-600 mt-1">Overall</div>
+              </div>
+            </div>
+            <div class="grid grid-cols-3 md:grid-cols-6 gap-2">
+              ${Object.entries(conv.scores).map(([key, value]) => `
+                <div class="text-center p-2 ${this.getScoreBg(value)} rounded-lg">
+                  <p class="text-xs text-gray-600 mb-1 capitalize">${key.replace(/_/g, ' ').substring(0, 12)}</p>
+                  <p class="font-bold ${this.getScoreColor(value)} text-sm">${value.toFixed(0)}%</p>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `;
+      }
+
+      resetUpload() {
+        this.currentView = 'upload';
+        this.uploadedFile = null;
+        this.render();
+      }
+
+      attachEventListeners() {
+        const fileInput = document.getElementById('fileInput');
+        if (fileInput) {
+          fileInput.addEventListener('change', (e) => this.handleFileUpload(e));
+        }
+
+        const filterSelect = document.getElementById('filterSelect');
+        if (filterSelect) {
+          filterSelect.value = this.filterMetric;
+          filterSelect.addEventListener('change', (e) => {
+            this.filterMetric = e.target.value;
+            this.render();
+          });
+        }
+      }
+    }
+
+    // Initialize app
+    const app = new ConversationEvaluator();
+    window.app = app;
+  </script>
+</body>
+</html>

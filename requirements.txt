@@ -1,0 +1,6 @@
+elevenlabs==1.0.0
+flask==3.0.0
+requests==2.31.0
+boto3==1.28.0
+PyYAML==6.0.1
+colorama==0.4.6
